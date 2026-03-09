@@ -3,12 +3,10 @@
 import { useRef } from "react";
 import type {
   ChapterWorkspace,
-  ChapterPrompt,
   ChapterImage,
   Chapter,
   GeneratedImage,
 } from "@/types";
-import { SYSTEM_PROMPT } from "@/lib/promptRules";
 import ImageGenerator from "@/components/ImageGenerator";
 
 interface ChapterCardProps {
@@ -52,64 +50,9 @@ export default function ChapterCard({
       ? workspace.imageStatus
       : workspace.imageStatus === "error"
       ? "error"
-      : workspace.promptStatus;
+      : "idle";
 
   const badge = STATUS_BADGE[overallStatus] ?? STATUS_BADGE.idle;
-
-  // ── Prompt generation ────────────────────────────────────────────────────
-  async function handleGeneratePrompts() {
-    if (!workspace.scriptContent.trim()) return;
-
-    onUpdate((prev) => ({
-      ...prev,
-      promptStatus: "generating",
-      promptError: undefined,
-      prompts: [],
-      images: [],
-      imageStatus: "idle",
-    }));
-
-    try {
-      const res = await fetch("/api/generate-prompts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chapterNumber: workspace.number,
-          chapterContent: workspace.scriptContent,
-          sceneCount: workspace.imageCount,
-          claudeApiKey: claudeApiKey || undefined,
-          customSystemPrompt:
-            customSystemPrompt !== SYSTEM_PROMPT ? customSystemPrompt : undefined,
-          storyContext: storyContext || undefined,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "프롬프트 생성 실패");
-
-      const rawPrompts: Array<{ label: string; prompt: string }> = data.prompts;
-      const prompts: ChapterPrompt[] = rawPrompts.map((p, i) => ({
-        index: i,
-        label: p.label,
-        prompt: p.prompt,
-      }));
-
-      onUpdate((prev) => ({ ...prev, promptStatus: "done", prompts }));
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      onUpdate((prev) => ({ ...prev, promptStatus: "error", promptError: msg }));
-    }
-  }
-
-  // ── Prompt editing ───────────────────────────────────────────────────────
-  function handleEditPrompt(index: number, value: string) {
-    onUpdate((prev) => ({
-      ...prev,
-      prompts: prev.prompts.map((p) =>
-        p.index === index ? { ...p, prompt: value } : p
-      ),
-    }));
-  }
 
   // ── Image generation ─────────────────────────────────────────────────────
   async function handleGenerateImages() {
@@ -198,10 +141,8 @@ export default function ChapterCard({
     error: img.error,
   }));
 
-  const isPromptGenerating = workspace.promptStatus === "generating";
   const isImageGenerating = workspace.imageStatus === "generating";
-  const canGenerateImages =
-    workspace.promptStatus === "done" && workspace.prompts.length > 0;
+  const canGenerateImages = !!workspace.customPrompt?.trim();
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -278,76 +219,42 @@ export default function ChapterCard({
               {workspace.imageCount}
             </span>
           </div>
-
-          <button
-            type="button"
-            onClick={handleGeneratePrompts}
-            disabled={isPromptGenerating || !workspace.scriptContent.trim()}
-            className="px-4 py-2 text-sm rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-40 transition flex items-center gap-2"
-          >
-            {isPromptGenerating ? (
-              <>
-                <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                생성 중...
-              </>
-            ) : (
-              "프롬프트 생성"
-            )}
-          </button>
         </div>
 
-        {/* Prompt error */}
-        {workspace.promptStatus === "error" && workspace.promptError && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-            {workspace.promptError}
+        {/* Single custom prompt per chapter */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-gray-600">
+              이미지 프롬프트 (챕터당 1개)
+            </p>
+            <button
+              type="button"
+              onClick={handleGenerateImages}
+              disabled={isImageGenerating || !canGenerateImages}
+              className="px-4 py-1.5 text-sm rounded-lg text-white hover:opacity-90 disabled:opacity-40 transition flex items-center gap-2"
+              style={{ backgroundColor: workspace.color }}
+            >
+              {isImageGenerating ? (
+                <>
+                  <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  이미지 생성 중...
+                </>
+              ) : (
+                "이미지 생성 시작"
+              )}
+            </button>
           </div>
-        )}
 
-        {/* Prompts list */}
-        {workspace.prompts.length > 0 && (
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-gray-600">
-                생성된 프롬프트 ({workspace.prompts.length}개) — 직접 편집 가능
-              </p>
-              <button
-                type="button"
-                onClick={handleGenerateImages}
-                disabled={isImageGenerating || !canGenerateImages}
-                className="px-4 py-1.5 text-sm rounded-lg text-white hover:opacity-90 disabled:opacity-40 transition flex items-center gap-2"
-                style={{ backgroundColor: workspace.color }}
-              >
-                {isImageGenerating ? (
-                  <>
-                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    이미지 생성 중...
-                  </>
-                ) : (
-                  "이미지 생성 시작"
-                )}
-              </button>
-            </div>
-
-            <div className="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
-              {workspace.prompts.map((p) => (
-                <div key={p.index} className="flex gap-2 items-start">
-                  <span
-                    className="text-[11px] font-bold mt-2 whitespace-nowrap"
-                    style={{ color: workspace.color }}
-                  >
-                    {p.label}
-                  </span>
-                  <textarea
-                    value={p.prompt}
-                    onChange={(e) => handleEditPrompt(p.index, e.target.value)}
-                    rows={2}
-                    className="flex-1 border border-gray-200 rounded px-2 py-1.5 text-xs resize-y focus:outline-none focus:ring-1 focus:ring-blue-400 bg-gray-50"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+          <textarea
+            value={workspace.customPrompt ?? ""}
+            onChange={(e) =>
+              onUpdate((prev) => ({ ...prev, customPrompt: e.target.value }))
+            }
+            rows={3}
+            className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs resize-y focus:outline-none focus:ring-1 focus:ring-blue-400 bg-gray-50"
+            placeholder="이 챕터 전체에 대해 사용할 이미지 프롬프트를 입력하세요. (이 프롬프트로 여러 이미지를 생성합니다.)"
+          />
+        </div>
 
         {/* Image error */}
         {workspace.imageStatus === "error" && workspace.imageError && (

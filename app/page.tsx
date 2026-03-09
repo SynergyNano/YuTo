@@ -31,13 +31,15 @@ function computeSize(longEdge: number, aspect: NanoAspectRatio) {
 }
 
 function createWorkspace(index: number): ChapterWorkspace {
+  const imageCount = 10;
   return {
     id: crypto.randomUUID(),
     number: index + 1,
     color: CHAPTER_COLORS[index % CHAPTER_COLORS.length],
     scriptContent: "",
-    imageCount: 10,
+    imageCount,
     prompts: [],
+    customPrompt: "",
     images: [],
     promptStatus: "idle",
     imageStatus: "idle",
@@ -100,7 +102,7 @@ export default function Home() {
   const [showImport, setShowImport] = useState(false);
   const [importError, setImportError] = useState("");
 
-  function handleImportScript() {
+  async function handleImportScript() {
     const parsed = parseChapters(fullScript);
     if (parsed.length === 0) {
       setImportError(
@@ -109,6 +111,7 @@ export default function Home() {
       return;
     }
     setImportError("");
+
     const newWorkspaces: ChapterWorkspace[] = parsed.map((chapter, i) => ({
       id: crypto.randomUUID(),
       number: chapter.number,
@@ -116,10 +119,12 @@ export default function Home() {
       scriptContent: chapter.content,
       imageCount: chapter.imageCount,
       prompts: [],
+      customPrompt: "",
       images: [],
       promptStatus: "idle",
       imageStatus: "idle",
     }));
+
     setWorkspaces(newWorkspaces);
     setFullScript("");
     setShowImport(false);
@@ -189,6 +194,11 @@ export default function Home() {
     }
   }, []);
 
+  // 전체 대본 학습용 프롬프트
+  const [fullScriptPrompt, setFullScriptPrompt] = useState(
+    "이 대본 전체를 읽고, 시각적으로 가장 중요한 핵심 장면들을 골라서 정리해 주세요."
+  );
+
   // ── 전체 대본 학습 (한 번) ────────────────────────────────────────────────
   async function handleLearnFullScript() {
     const script = workspaces
@@ -207,7 +217,12 @@ export default function Home() {
       const res = await fetch("/api/analyze-script", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ script, sceneCount: 12 }),
+        body: JSON.stringify({
+          script,
+          sceneCount: 12,
+          claudeApiKey: claudeApiKey || undefined,
+          customSystemPrompt: fullScriptPrompt || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -270,6 +285,9 @@ export default function Home() {
             <p className="text-xs text-gray-500">
               전체 대본을 붙여넣으면 챕터를 자동으로 파싱해서 카드를 생성합니다.
               <span className="text-amber-600 font-medium"> 기존 카드는 모두 교체됩니다.</span>
+              {claudeApiKey && (
+                <span className="text-blue-600 font-medium"> Claude API 키가 있으면 프롬프트도 자동 생성됩니다.</span>
+              )}
             </p>
             <textarea
               value={fullScript}
@@ -278,6 +296,21 @@ export default function Home() {
               rows={8}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-gray-600">
+                전체 대본 학습 프롬프트 (선택)
+              </label>
+              <textarea
+                value={fullScriptPrompt}
+                onChange={(e) => setFullScriptPrompt(e.target.value)}
+                rows={3}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs resize-y focus:outline-none focus:ring-2 focus:ring-purple-400 bg-gray-50"
+                placeholder="이 대본을 어떻게 학습하고, 어떤 기준으로 장면을 뽑을지 자유롭게 적어주세요."
+              />
+              <p className="text-[11px] text-gray-400">
+                이 프롬프트를 기준으로 Claude가 전체 대본을 한 번 학습합니다.
+              </p>
+            </div>
             {importError && (
               <p className="text-xs text-red-500">{importError}</p>
             )}

@@ -6,9 +6,11 @@ import type { SceneSelection } from "@/types";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { script, sceneCount } = body as {
+    const { script, sceneCount, claudeApiKey, customSystemPrompt } = body as {
       script: string;
       sceneCount: number;
+      claudeApiKey?: string;
+      customSystemPrompt?: string;
     };
 
     if (!script?.trim()) {
@@ -16,7 +18,10 @@ export async function POST(request: NextRequest) {
     }
 
     const count = Math.max(1, Math.min(20, sceneCount || 10));
-    const raw = await analyzeScript(script, count);
+    const raw = await analyzeScript(script, count, {
+      apiKey: claudeApiKey,
+      systemPrompt: customSystemPrompt,
+    });
 
     const scenes: SceneSelection[] = raw.map((r, i) => {
       const color = CHAPTER_COLORS[i % CHAPTER_COLORS.length];
