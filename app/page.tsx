@@ -195,7 +195,7 @@ export default function Home() {
               <textarea
                 value={fullScript}
                 onChange={(e) => setFullScript(e.target.value)}
-                placeholder={"챕터 1\n...\n\n챕터 2\n...\n\n챕터 3\n..."}
+                placeholder=""
                 rows={8}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-400"
               />

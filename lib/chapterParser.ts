@@ -57,7 +57,7 @@ export function parseChapters(script: string): Chapter[] {
   if (matches.length === 0) return [];
 
   const chapters: Chapter[] = [];
-  for (let i = 0; i < matches.length && i < 10; i++) {
+  for (let i = 0; i < matches.length && i < 30; i++) {
     const start = matches[i].index;
     const end = i + 1 < matches.length ? matches[i + 1].index : script.length;
     const content = script.slice(start, end).trim();
