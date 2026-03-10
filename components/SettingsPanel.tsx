@@ -21,9 +21,15 @@ interface SettingsPanelProps {
   onNanoLongEdgeChange: (v: number) => void;
   nanoWidth: number;
   nanoHeight: number;
-  customSystemPrompt: string;
-  onCustomSystemPromptChange: (v: string) => void;
-  defaultSystemPrompt: string;
+  fullScriptPrompt: string;
+  onFullScriptPromptChange: (v: string) => void;
+  defaultFullScriptPrompt: string;
+  learnStatus: "idle" | "testing" | "ok" | "error";
+  onSaveFullScriptPrompt: () => void;
+  defaultImagePrompt: string;
+  onDefaultImagePromptChange: (v: string) => void;
+  defaultDefaultImagePrompt: string;
+  onSaveDefaultImagePrompt: () => void;
 }
 
 export default function SettingsPanel({
@@ -41,9 +47,15 @@ export default function SettingsPanel({
   onNanoLongEdgeChange,
   nanoWidth,
   nanoHeight,
-  customSystemPrompt,
-  onCustomSystemPromptChange,
-  defaultSystemPrompt,
+  fullScriptPrompt,
+  onFullScriptPromptChange,
+  defaultFullScriptPrompt,
+  learnStatus,
+  onSaveFullScriptPrompt,
+  defaultImagePrompt,
+  onDefaultImagePromptChange,
+  defaultDefaultImagePrompt,
+  onSaveDefaultImagePrompt,
 }: SettingsPanelProps) {
   const [showClaudeKey, setShowClaudeKey] = useState(false);
   const [claudeTestStatus, setClaudeTestStatus] = useState<TestStatus>("idle");
@@ -53,7 +65,10 @@ export default function SettingsPanel({
   const [nanoTestStatus, setNanoTestStatus] = useState<TestStatus>("idle");
   const [nanoTestMsg, setNanoTestMsg] = useState("");
 
-  const [showPromptRules, setShowPromptRules] = useState(false);
+  const [showLearnPrompt, setShowLearnPrompt] = useState(false);
+  const [showImagePrompt, setShowImagePrompt] = useState(false);
+  const [learnPromptSaved, setLearnPromptSaved] = useState(false);
+  const [imagePromptSaved, setImagePromptSaved] = useState(false);
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
@@ -302,9 +317,9 @@ export default function SettingsPanel({
                   onChange={(e) => onNanoLongEdgeChange(Number(e.target.value))}
                   className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
                 >
-                  <option value={768}>768</option>
-                  <option value={1024}>1024</option>
-                  <option value={1536}>1536</option>
+                  <option value={1536}>1536 (기본)</option>
+                  <option value={2048}>2048 (고화질)</option>
+                  <option value={2560}>2560 (최고화질)</option>
                 </select>
                 <span className="text-xs text-gray-500 whitespace-nowrap">
                   출력: {nanoWidth}×{nanoHeight}
@@ -313,40 +328,119 @@ export default function SettingsPanel({
             </div>
           </section>
 
-          {/* ── 프롬프트 규칙 ── */}
+          {/* ── 전체 대본 프롬프트 ── */}
           <section className="flex flex-col gap-3">
             <button
               type="button"
-              onClick={() => setShowPromptRules((v) => !v)}
+              onClick={() => setShowLearnPrompt((v) => !v)}
               className="flex items-center justify-between text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-gray-100 pb-2 hover:text-gray-700 transition"
             >
               <span className="flex items-center gap-2">
-                프롬프트 규칙
-                {customSystemPrompt !== defaultSystemPrompt && (
+                전체 대본 프롬프트
+                {fullScriptPrompt !== defaultFullScriptPrompt && (
+                  <span className="text-xs font-normal normal-case text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                    수정됨
+                  </span>
+                )}
+                {learnStatus === "ok" && (
+                  <span className="text-xs font-normal normal-case text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">
+                    학습됨
+                  </span>
+                )}
+              </span>
+              <span className="text-gray-400">{showLearnPrompt ? "▲" : "▼"}</span>
+            </button>
+            {showLearnPrompt && (
+              <>
+                <p className="text-xs text-gray-500">
+                  이 프롬프트를 기준으로 Claude가 전체 대본을 한 번 학습합니다.
+                </p>
+                <textarea
+                  value={fullScriptPrompt}
+                  onChange={(e) => onFullScriptPromptChange(e.target.value)}
+                  rows={4}
+                  className="w-full p-3 border border-gray-300 rounded-lg text-xs font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-400 bg-gray-50"
+                  placeholder="어떻게 학습할지 Claude에게 지시하세요..."
+                />
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSaveFullScriptPrompt();
+                      setLearnPromptSaved(true);
+                      setTimeout(() => setLearnPromptSaved(false), 2000);
+                    }}
+                    className="px-4 py-1.5 text-sm rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition"
+                  >
+                    저장
+                  </button>
+                  {learnPromptSaved && (
+                    <span className="text-xs text-emerald-600 font-medium">✓ 저장됨</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onFullScriptPromptChange(defaultFullScriptPrompt)}
+                    className="text-xs text-gray-400 hover:text-gray-600 underline"
+                  >
+                    기본값으로 초기화
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+
+          {/* ── 기본 이미지 프롬프트 ── */}
+          <section className="flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => setShowImagePrompt((v) => !v)}
+              className="flex items-center justify-between text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-gray-100 pb-2 hover:text-gray-700 transition"
+            >
+              <span className="flex items-center gap-2">
+                기본 이미지 프롬프트
+                {defaultImagePrompt !== defaultDefaultImagePrompt && (
                   <span className="text-xs font-normal normal-case text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
                     수정됨
                   </span>
                 )}
               </span>
-              <span className="text-gray-400">{showPromptRules ? "▲" : "▼"}</span>
+              <span className="text-gray-400">{showImagePrompt ? "▲" : "▼"}</span>
             </button>
-            {showPromptRules && (
+            {showImagePrompt && (
               <>
                 <p className="text-xs text-gray-500">
-                  이미지 프롬프트 생성에 사용되는 시스템 지침입니다.
+                  각 챕터 카드의 이미지 프롬프트 기본값입니다. 카드에서 직접 수정하면 해당 카드만 변경됩니다.
                 </p>
                 <textarea
-                  value={customSystemPrompt}
-                  onChange={(e) => onCustomSystemPromptChange(e.target.value)}
-                  className="w-full h-48 p-3 border border-gray-300 rounded-lg text-xs font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-400 bg-gray-50"
+                  value={defaultImagePrompt}
+                  onChange={(e) => onDefaultImagePromptChange(e.target.value)}
+                  rows={5}
+                  className="w-full p-3 border border-gray-300 rounded-lg text-xs font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-400 bg-gray-50"
+                  placeholder="모든 챕터 카드에 기본으로 들어갈 이미지 프롬프트..."
                 />
-                <button
-                  type="button"
-                  onClick={() => onCustomSystemPromptChange(defaultSystemPrompt)}
-                  className="text-xs text-gray-400 hover:text-gray-600 underline self-start"
-                >
-                  기본값으로 초기화
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSaveDefaultImagePrompt();
+                      setImagePromptSaved(true);
+                      setTimeout(() => setImagePromptSaved(false), 2000);
+                    }}
+                    className="px-4 py-1.5 text-sm rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition"
+                  >
+                    저장
+                  </button>
+                  {imagePromptSaved && (
+                    <span className="text-xs text-emerald-600 font-medium">✓ 저장됨</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onDefaultImagePromptChange(defaultDefaultImagePrompt)}
+                    className="text-xs text-gray-400 hover:text-gray-600 underline"
+                  >
+                    기본값으로 초기화
+                  </button>
+                </div>
               </>
             )}
           </section>

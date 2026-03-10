@@ -9,7 +9,10 @@
       "Bash(npm install:*)",
       "Bash(D:/project/yuto/.env.local:*)",
       "Bash(npx tsc:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(git remote:*)",
+      "Bash(git push:*)",
+      "WebSearch"
     ]
   }
 }

@@ -14,8 +14,9 @@ interface ChapterCardProps {
   onUpdate: (updater: (prev: ChapterWorkspace) => ChapterWorkspace) => void;
   onDelete: () => void;
   claudeApiKey: string;
-  customSystemPrompt: string;
   nanoBananaKey: string;
+  storyContext?: string;
+  defaultImagePrompt?: string;
   nanoOptions: {
     modelPref: "best" | "fast" | "v2";
     aspectRatio: "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
@@ -36,8 +37,9 @@ export default function ChapterCard({
   onUpdate,
   onDelete,
   claudeApiKey,
-  customSystemPrompt,
   nanoBananaKey,
+  storyContext,
+  defaultImagePrompt = "",
   nanoOptions,
 }: ChapterCardProps) {
   const imagesRef = useRef<ChapterImage[]>([]);
@@ -64,7 +66,7 @@ export default function ChapterCard({
     }
 
     const count = Math.min(10, Math.max(1, workspace.imageCount));
-    const promptText = (workspace.customPrompt ?? "").trim();
+    const promptText = (workspace.customPrompt || defaultImagePrompt).trim();
     if (!promptText) return;
 
     const initialImages: ChapterImage[] = Array.from({ length: count }, (_, i) => ({
@@ -141,8 +143,9 @@ export default function ChapterCard({
     error: img.error,
   }));
 
+  const effectivePrompt = workspace.customPrompt || defaultImagePrompt;
   const isImageGenerating = workspace.imageStatus === "generating";
-  const canGenerateImages = !!workspace.customPrompt?.trim();
+  const canGenerateImages = !!effectivePrompt.trim();
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -188,7 +191,7 @@ export default function ChapterCard({
               onUpdate((prev) => ({ ...prev, scriptContent: e.target.value }))
             }
             placeholder={`챕터 ${workspace.number}의 대본 텍스트를 붙여넣으세요...`}
-            rows={6}
+            rows={14}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
         </div>
@@ -250,9 +253,9 @@ export default function ChapterCard({
             onChange={(e) =>
               onUpdate((prev) => ({ ...prev, customPrompt: e.target.value }))
             }
-            rows={3}
+            rows={10}
             className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs resize-y focus:outline-none focus:ring-1 focus:ring-blue-400 bg-gray-50"
-            placeholder="이 챕터 전체에 대해 사용할 이미지 프롬프트를 입력하세요. (이 프롬프트로 여러 이미지를 생성합니다.)"
+            placeholder={defaultImagePrompt || "이 챕터 전체에 대해 사용할 이미지 프롬프트를 입력하세요."}
           />
         </div>
 
