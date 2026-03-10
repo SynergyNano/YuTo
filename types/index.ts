@@ -60,13 +60,8 @@ export interface ChapterWorkspace {
   color: string;
   scriptContent: string;
   imageCount: number;
-  // Optional legacy per-scene prompts (no longer used for UI)
-  prompts: ChapterPrompt[];
-  // Single user-defined prompt per chapter
   customPrompt?: string;
   images: ChapterImage[];
-  promptStatus: "idle" | "generating" | "done" | "error";
   imageStatus: "idle" | "generating" | "done" | "error";
-  promptError?: string;
   imageError?: string;
 }

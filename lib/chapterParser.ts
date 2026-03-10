@@ -30,9 +30,8 @@ function getChapterNumber(title: string): number {
 }
 
 export function getDefaultImageCount(chapterNumber: number): number {
-  if (chapterNumber <= 3) return 10;
-  if (chapterNumber <= 5) return 5;
-  return 3;
+  const n = chapterNumber <= 3 ? 10 : chapterNumber <= 5 ? 5 : 3;
+  return Math.min(10, n);
 }
 
 export function parseChapters(script: string): Chapter[] {

@@ -22,7 +22,6 @@ interface ChapterCardProps {
     width: number;
     height: number;
   };
-  storyContext?: string;
 }
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
@@ -40,7 +39,6 @@ export default function ChapterCard({
   customSystemPrompt,
   nanoBananaKey,
   nanoOptions,
-  storyContext,
 }: ChapterCardProps) {
   const imagesRef = useRef<ChapterImage[]>([]);
 
@@ -60,14 +58,18 @@ export default function ChapterCard({
       onUpdate((prev) => ({
         ...prev,
         imageStatus: "error",
-        imageError: "나노 바나나 API 키를 먼저 입력해주세요. (상단 API 설정)",
+        imageError: "나노 바나나 API 키를 먼저 입력해주세요. (우측 ⚙ 설정)",
       }));
       return;
     }
 
-    const initialImages: ChapterImage[] = workspace.prompts.map((p) => ({
-      index: p.index,
-      label: p.label,
+    const count = Math.min(10, Math.max(1, workspace.imageCount));
+    const promptText = (workspace.customPrompt ?? "").trim();
+    if (!promptText) return;
+
+    const initialImages: ChapterImage[] = Array.from({ length: count }, (_, i) => ({
+      index: i,
+      label: `장면 ${i + 1}`,
       imageUrl: null,
       status: "pending",
     }));
@@ -80,9 +82,7 @@ export default function ChapterCard({
       images: initialImages,
     }));
 
-    for (let i = 0; i < workspace.prompts.length; i++) {
-      const prompt = workspace.prompts[i];
-
+    for (let i = 0; i < count; i++) {
       imagesRef.current = imagesRef.current.map((img, idx) =>
         idx === i ? { ...img, status: "generating" } : img
       );
@@ -93,7 +93,7 @@ export default function ChapterCard({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            prompt: prompt.prompt,
+            prompt: promptText,
             apiKey: nanoBananaKey,
             options: nanoOptions,
           }),
@@ -202,12 +202,12 @@ export default function ChapterCard({
             <input
               type="range"
               min={1}
-              max={20}
-              value={workspace.imageCount}
+              max={10}
+              value={Math.min(10, workspace.imageCount)}
               onChange={(e) =>
                 onUpdate((prev) => ({
                   ...prev,
-                  imageCount: Number(e.target.value),
+                  imageCount: Math.min(10, Math.max(1, Number(e.target.value))),
                 }))
               }
               className="flex-1"
@@ -216,7 +216,7 @@ export default function ChapterCard({
               className="text-sm font-bold w-6 text-center"
               style={{ color: workspace.color }}
             >
-              {workspace.imageCount}
+              {Math.min(10, workspace.imageCount)}
             </span>
           </div>
         </div>
