@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type NanoModelPref = "best" | "fast" | "v2";
 type NanoAspectRatio = "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
@@ -70,6 +70,32 @@ export default function SettingsPanel({
   const [learnPromptSaved, setLearnPromptSaved] = useState(false);
   const [imagePromptSaved, setImagePromptSaved] = useState(false);
 
+  const [panelWidth, setPanelWidth] = useState(384); // 기본 w-96
+  const isDragging = useRef(false);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
+
+  function handleResizeMouseDown(e: React.MouseEvent) {
+    e.preventDefault();
+    isDragging.current = true;
+    startX.current = e.clientX;
+    startWidth.current = panelWidth;
+
+    function onMouseMove(ev: MouseEvent) {
+      if (!isDragging.current) return;
+      const delta = startX.current - ev.clientX;
+      const newWidth = Math.min(800, Math.max(280, startWidth.current + delta));
+      setPanelWidth(newWidth);
+    }
+    function onMouseUp() {
+      isDragging.current = false;
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    }
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }
+
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
     return () => {
@@ -136,10 +162,19 @@ export default function SettingsPanel({
 
       {/* Panel */}
       <div
-        className={`fixed top-0 right-0 h-full w-96 bg-white z-50 shadow-2xl flex flex-col transition-transform duration-300 ease-in-out ${
+        style={{ width: panelWidth }}
+        className={`fixed top-0 right-0 h-full bg-white z-50 shadow-2xl flex flex-col transition-transform duration-300 ease-in-out ${
           open ? "translate-x-0" : "translate-x-full"
         }`}
       >
+        {/* 드래그 핸들 */}
+        <div
+          onMouseDown={handleResizeMouseDown}
+          className="absolute left-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-indigo-400 transition-colors group z-10"
+          title="드래그하여 너비 조절"
+        >
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 bg-gray-300 rounded-full group-hover:bg-indigo-400 transition-colors" />
+        </div>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 flex-shrink-0">
           <h2 className="text-base font-bold text-gray-900">설정</h2>

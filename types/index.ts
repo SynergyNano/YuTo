@@ -61,6 +61,9 @@ export interface ChapterWorkspace {
   scriptContent: string;
   imageCount: number;
   customPrompt?: string;
+  scenePrompts?: string[];
+  promptStatus?: "idle" | "generating" | "done" | "error";
+  promptError?: string;
   images: ChapterImage[];
   imageStatus: "idle" | "generating" | "done" | "error";
   imageError?: string;

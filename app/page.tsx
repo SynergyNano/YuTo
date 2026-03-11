@@ -79,7 +79,7 @@ export default function Home() {
   const [fullScript, setFullScript] = useState("");
   const [showImport, setShowImport] = useState(true);
   const [importError, setImportError] = useState("");
-  const DEFAULT_FULL_SCRIPT_PROMPT = "이 대본 전체를 읽고, 시각적으로 가장 중요한 핵심 장면들을 골라서 정리해 주세요.";
+  const DEFAULT_FULL_SCRIPT_PROMPT = "전체 대본을 읽고, 어떤 내용인지 상세하게 학습해줘";
   const [fullScriptPrompt, setFullScriptPrompt] = useState(DEFAULT_FULL_SCRIPT_PROMPT);
   const [learnedScenes, setLearnedScenes] = useState<SceneSelection[]>([]);
   const [learnStatus, setLearnStatus] = useState<"idle" | "testing" | "ok" | "error">("idle");
@@ -91,7 +91,7 @@ export default function Home() {
       ).join("\n")
     : "";
 
-  function handleImportScript() {
+  async function handleImportScript() {
     const parsed = parseChapters(fullScript);
     if (parsed.length === 0) {
       setImportError(
@@ -108,13 +108,51 @@ export default function Home() {
       scriptContent: chapter.content,
       imageCount: chapter.imageCount,
       customPrompt: "",
+      scenePrompts: [],
+      promptStatus: claudeApiKey.trim() ? "generating" as const : "idle" as const,
       images: [],
-      imageStatus: "idle",
+      imageStatus: "idle" as const,
     }));
 
     setWorkspaces(newWorkspaces);
     setFullScript("");
     setShowImport(false);
+
+    if (!claudeApiKey.trim()) return;
+
+    // 각 챕터별 프롬프트 자동 생성
+    for (const ws of newWorkspaces) {
+      try {
+        const res = await fetch("/api/generate-prompts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chapterNumber: ws.number,
+            chapterContent: ws.scriptContent,
+            sceneCount: ws.imageCount,
+            claudeApiKey,
+            customSystemPrompt: defaultImagePrompt,
+            storyContext: learnedStoryContext,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "프롬프트 생성 실패");
+
+        const prompts: string[] = (data.prompts as { prompt: string }[]).map((p) => p.prompt);
+        setWorkspaces((prev) =>
+          prev.map((w) =>
+            w.id === ws.id ? { ...w, scenePrompts: prompts, promptStatus: "done" } : w
+          )
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        setWorkspaces((prev) =>
+          prev.map((w) =>
+            w.id === ws.id ? { ...w, promptStatus: "error", promptError: message } : w
+          )
+        );
+      }
+    }
   }
 
   async function handleLearnFullScript() {
