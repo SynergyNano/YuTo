@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { signOut, useSession } from "next-auth/react";
 import type { ChapterWorkspace, SceneSelection } from "@/types";
 import { CHAPTER_COLORS, parseChapters } from "@/lib/chapterParser";
 import { DEFAULT_IMAGE_PROMPT } from "@/lib/promptRules";
@@ -44,6 +45,7 @@ function createWorkspace(index: number): ChapterWorkspace {
 }
 
 export default function Home() {
+  const { data: session } = useSession();
   // ── Workspaces ───────────────────────────────────────────────────────────
   const [workspaces, setWorkspaces] = useState<ChapterWorkspace[]>([
     createWorkspace(0),
@@ -75,7 +77,7 @@ export default function Home() {
 
   // ── 전체 대본 가져오기 ───────────────────────────────────────────────────
   const [fullScript, setFullScript] = useState("");
-  const [showImport, setShowImport] = useState(false);
+  const [showImport, setShowImport] = useState(true);
   const [importError, setImportError] = useState("");
   const DEFAULT_FULL_SCRIPT_PROMPT = "이 대본 전체를 읽고, 시각적으로 가장 중요한 핵심 장면들을 골라서 정리해 주세요.";
   const [fullScriptPrompt, setFullScriptPrompt] = useState(DEFAULT_FULL_SCRIPT_PROMPT);
@@ -215,7 +217,7 @@ export default function Home() {
       {/* ── Sticky Header ─────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-30 bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-          <h1 className="text-lg font-bold text-gray-900">대본 이미지 생성기</h1>
+          <h1 className="text-lg font-bold text-gray-900">유토피아</h1>
           <div className="flex items-center gap-2">
             {/* Claude 배지 */}
             <div className={`flex items-center rounded-full border text-xs font-medium overflow-hidden ${
@@ -248,6 +250,19 @@ export default function Home() {
             >
               ⚙ 설정
             </button>
+            {session?.user && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500 hidden sm:block">
+                  {session.user.email}
+                </span>
+                <button
+                  onClick={() => signOut({ callbackUrl: "/login" })}
+                  className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition"
+                >
+                  로그아웃
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>

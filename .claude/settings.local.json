@@ -12,7 +12,15 @@
       "Bash(npm run:*)",
       "Bash(git remote:*)",
       "Bash(git push:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(git config:*)",
+      "Bash(ls -la /d/project/yuto/app/api/*/)",
+      "Bash(wc -l /d/project/yuto/components/*.tsx /d/project/yuto/app/*.tsx)",
+      "Bash(cd D:/project/yuto && npx prisma init 2>&1)",
+      "Bash(cd D:/project/yuto && npx prisma generate 2>&1)",
+      "Bash(cd D:/project/yuto && npx prisma migrate dev --name init 2>&1)",
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(32\\).toString\\('base64'\\)\\)\")",
+      "Bash(cd D:/project/yuto && npx prisma migrate dev --name add_isactive 2>&1)"
     ]
   }
 }
