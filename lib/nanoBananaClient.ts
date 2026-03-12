@@ -13,6 +13,7 @@ export interface NanoBananaGenerateOptions {
   width?: number;
   height?: number;
   steps?: number;
+  characterImages?: string[]; // max 4 reference images
 }
 
 function isGoogleGenerativeLanguageUrl(url: URL) {
@@ -84,6 +85,8 @@ async function callGoogleGenerateImages(
   const url = new URL(path, baseUrl.origin);
   url.searchParams.set("key", apiKey);
 
+  // 주의: Google generateImages/predict API에는 레퍼런스 이미지(characterImages) 필드가 없음.
+  // options.characterImages는 여기서 사용하지 않음 → 캐릭터 일관성은 커스텀 나노 바나나 백엔드 사용 시에만 적용됨.
   const body =
     method === "generateImages"
       ? {
@@ -289,6 +292,7 @@ export async function generateImage(
     try {
       // Use options to influence model selection and aspect ratio when possible.
       // For Google generateImages, we apply aspectRatio. "resolution" support varies by API.
+      // characterImages(레퍼런스 이미지)는 Google API 요청에 포함되지 않음 → 캐릭터 일관성 미지원.
       const models = await listGoogleModels(apiKey, url);
       const imagenCandidates = models
         .filter((m) => typeof m.name === "string" && m.name.includes("imagen"))
@@ -352,6 +356,9 @@ export async function generateImage(
         width: options?.width ?? 1024,
         height: options?.height ?? 1024,
         num_inference_steps: options?.steps ?? 30,
+        ...(options?.characterImages?.length
+          ? { character_images: options.characterImages.slice(0, 4) }
+          : {}),
       }),
     });
   } catch (err) {

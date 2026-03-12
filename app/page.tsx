@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { signOut, useSession } from "next-auth/react";
-import type { ChapterWorkspace, SceneSelection } from "@/types";
+import type { CharacterProfile, ChapterWorkspace, SceneSelection } from "@/types";
 import { CHAPTER_COLORS, parseChapters } from "@/lib/chapterParser";
 import { DEFAULT_IMAGE_PROMPT } from "@/lib/promptRules";
 import ChapterCard from "@/components/ChapterCard";
@@ -46,6 +46,8 @@ function createWorkspace(index: number): ChapterWorkspace {
 
 export default function Home() {
   const { data: session } = useSession();
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
   // ── Workspaces ───────────────────────────────────────────────────────────
   const [workspaces, setWorkspaces] = useState<ChapterWorkspace[]>([
     createWorkspace(0),
@@ -84,6 +86,129 @@ export default function Home() {
   const [learnedScenes, setLearnedScenes] = useState<SceneSelection[]>([]);
   const [learnStatus, setLearnStatus] = useState<"idle" | "testing" | "ok" | "error">("idle");
   const [learnMsg, setLearnMsg] = useState("");
+  const [showLearnResult, setShowLearnResult] = useState(false);
+
+  // ── 등장인물 추출 ─────────────────────────────────────────────────────────
+  const [extractedCharacters, setExtractedCharacters] = useState<CharacterProfile[]>([]);
+  const [selectedCharacterNames, setSelectedCharacterNames] = useState<Set<string>>(new Set());
+  const [characterStatus, setCharacterStatus] = useState<"idle" | "extracting" | "done" | "error">("idle");
+  const [characterMsg, setCharacterMsg] = useState("");
+
+  const selectedCharacters = extractedCharacters.filter((c) =>
+    selectedCharacterNames.has(c.name)
+  );
+
+  const characterImages = selectedCharacters
+    .filter((c) => c.referenceImageUrl)
+    .map((c) => c.referenceImageUrl!)
+    .slice(0, 4);
+
+  async function handleExtractCharacters() {
+    if (!fullScript.trim()) {
+      setCharacterStatus("error");
+      setCharacterMsg("대본을 먼저 붙여넣어 주세요.");
+      return;
+    }
+    setCharacterStatus("extracting");
+    setCharacterMsg("");
+    try {
+      const res = await fetch("/api/extract-characters", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ script: fullScript, claudeApiKey }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "추출 실패");
+      const chars: CharacterProfile[] = data.characters ?? [];
+      setExtractedCharacters(chars);
+      setSelectedCharacterNames(new Set());
+      setCharacterStatus("done");
+      setCharacterMsg(`${chars.length}명 추출 완료`);
+    } catch (err) {
+      setCharacterStatus("error");
+      setCharacterMsg(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleGenerateCharacterImage(name: string) {
+    const char = extractedCharacters.find((c) => c.name === name);
+    if (!char) return;
+    if (!nanoBananaKey.trim()) {
+      alert("나노 바나나 API 키를 먼저 입력해주세요. (우측 ⚙ 설정)");
+      return;
+    }
+
+    setExtractedCharacters((prev) =>
+      prev.map((c) => c.name === name ? { ...c, imageStatus: "generating" } : c)
+    );
+
+    const prompt =
+      `Full body portrait of ${char.description}, standing in neutral front-facing pose, ` +
+      `white background, reference sheet style, high quality photography, ` +
+      `detailed face and clothing visible, full figure from head to toe.`;
+
+    try {
+      const res = await fetch("/api/generate-images", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt,
+          apiKey: nanoBananaKey,
+          options: { aspectRatio: "1:1" },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "이미지 생성 실패");
+
+      const imageUrl =
+        data.imageUrl ??
+        (data.base64 ? `data:image/png;base64,${data.base64}` : null);
+
+      setExtractedCharacters((prev) =>
+        prev.map((c) =>
+          c.name === name
+            ? { ...c, imageStatus: "done", referenceImageUrl: imageUrl ?? undefined }
+            : c
+        )
+      );
+    } catch (err) {
+      setExtractedCharacters((prev) =>
+        prev.map((c) => c.name === name ? { ...c, imageStatus: "error" } : c)
+      );
+      console.error("캐릭터 이미지 생성 실패:", err);
+    }
+  }
+
+  async function handleGenerateAllCharacterImages() {
+    const toGenerate = extractedCharacters.filter(
+      (c) => selectedCharacterNames.has(c.name) && c.imageStatus !== "generating"
+    );
+    for (const char of toGenerate) {
+      await handleGenerateCharacterImage(char.name);
+    }
+  }
+
+  function toggleCharacter(name: string) {
+    setSelectedCharacterNames((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        if (next.size >= 4) return prev; // 최대 4명 제한
+        next.add(name);
+      }
+      return next;
+    });
+  }
+
+  function selectAllCharacters() {
+    const top4 = extractedCharacters.slice(0, 4).map((c) => c.name);
+    setSelectedCharacterNames(new Set(top4));
+  }
+
+  function deselectAllCharacters() {
+    setSelectedCharacterNames(new Set());
+  }
 
   const learnedStoryContext = learnedScenes.length > 0
     ? learnedScenes.map(s =>
@@ -133,6 +258,7 @@ export default function Home() {
             claudeApiKey,
             customSystemPrompt: defaultImagePrompt,
             storyContext: learnedStoryContext,
+            characters: selectedCharacters.length > 0 ? selectedCharacters : undefined,
           }),
         });
         const data = await res.json();
@@ -155,7 +281,7 @@ export default function Home() {
     }
   }
 
-  async function handleLearnFullScript() {
+  async function handleAnalyzeScript() {
     const script = fullScript;
     if (!script.trim()) {
       setLearnStatus("error");
@@ -164,25 +290,50 @@ export default function Home() {
     }
     setLearnStatus("testing");
     setLearnMsg("");
+    setCharacterStatus("extracting");
+    setCharacterMsg("");
+    setShowLearnResult(false);
+
     try {
-      const res = await fetch("/api/analyze-script", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          script,
-          sceneCount: 12,
-          claudeApiKey,
-          customSystemPrompt: fullScriptPrompt,
+      const [sceneRes, charRes] = await Promise.all([
+        fetch("/api/analyze-script", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            script,
+            sceneCount: 12,
+            claudeApiKey,
+            customSystemPrompt: fullScriptPrompt,
+          }),
         }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "분석 실패");
-      setLearnedScenes(data.scenes ?? []);
+        fetch("/api/extract-characters", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ script, claudeApiKey }),
+        }),
+      ]);
+
+      const sceneData = await sceneRes.json();
+      if (!sceneRes.ok) throw new Error(sceneData.error ?? "줄거리 분석 실패");
+      const scenes = sceneData.scenes ?? [];
+      setLearnedScenes(scenes);
       setLearnStatus("ok");
-      setLearnMsg(`${(data.scenes ?? []).length}개 장면 학습 완료`);
+      setLearnMsg(`줄거리 ${scenes.length}개 장면 학습 완료`);
+      setShowLearnResult(true);
+
+      const charData = await charRes.json();
+      if (!charRes.ok) throw new Error(charData.error ?? "등장인물 추출 실패");
+      const chars: CharacterProfile[] = charData.characters ?? [];
+      setExtractedCharacters(chars);
+      setSelectedCharacterNames(new Set());
+      setCharacterStatus("done");
+      setCharacterMsg(`${chars.length}명 추출 완료`);
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       setLearnStatus("error");
-      setLearnMsg(err instanceof Error ? err.message : String(err));
+      setLearnMsg(msg);
+      setCharacterStatus("error");
+      setCharacterMsg(msg);
     }
   }
 
@@ -345,26 +496,155 @@ export default function Home() {
                 </button>
                 <button
                   type="button"
-                  onClick={handleLearnFullScript}
-                  disabled={learnStatus === "testing"}
+                  onClick={handleAnalyzeScript}
+                  disabled={learnStatus === "testing" || !fullScript.trim()}
                   className="px-5 py-2 text-sm rounded-lg bg-violet-500 text-white hover:bg-violet-600 disabled:opacity-40 transition flex items-center gap-2"
                 >
                   {learnStatus === "testing" ? (
                     <>
                       <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      학습 중...
+                      분석 중...
                     </>
                   ) : (
-                    "전체 대본 학습"
+                    "전체 대본 분석"
                   )}
                 </button>
                 {learnStatus === "ok" && (
-                  <span className="text-xs text-emerald-600 font-medium">✓ {learnMsg}</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowLearnResult((v) => !v)}
+                    className="text-xs text-violet-600 font-medium hover:text-violet-800 underline"
+                  >
+                    ✓ {learnMsg}
+                    {extractedCharacters.length > 0 && ` · 등장인물 ${extractedCharacters.length}명`}
+                    {" "}{showLearnResult ? "▲ 숨기기" : "▼ 결과 보기"}
+                  </button>
                 )}
                 {learnStatus === "error" && (
                   <span className="text-xs text-red-500">✕ {learnMsg}</span>
                 )}
               </div>
+
+              {/* 학습 결과 */}
+              {showLearnResult && learnedScenes.length > 0 && (
+                <div className="border border-violet-200 rounded-lg bg-violet-50 overflow-hidden">
+                  <div className="px-3 py-2 bg-violet-100 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-violet-700">
+                      학습된 장면 {learnedScenes.length}개
+                    </span>
+                    <span className="text-xs text-violet-400">챕터 프롬프트 생성 시 맥락으로 활용됩니다</span>
+                  </div>
+                  <div className="divide-y divide-violet-100">
+                    {learnedScenes.map((scene) => (
+                      <div key={scene.number} className="px-3 py-2.5 flex gap-3">
+                        <span className="text-xs font-bold text-violet-400 shrink-0 mt-0.5">
+                          #{scene.number}
+                        </span>
+                        <div className="flex flex-col gap-1 min-w-0">
+                          <p className="text-xs font-medium text-gray-700">{scene.description}</p>
+                          {scene.excerpt && (
+                            <p className="text-xs text-gray-400 italic truncate">
+                              "{scene.excerpt.slice(0, 80)}{scene.excerpt.length > 80 ? "…" : ""}"
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 등장인물 목록 */}
+              {extractedCharacters.length > 0 && (
+                <div className="mt-1 border border-emerald-200 rounded-lg p-3 bg-emerald-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-emerald-700">
+                      등장인물 {extractedCharacters.length}명 추출됨 — {selectedCharacterNames.size}/4명 선택
+                      {selectedCharacterNames.size >= 4 && (
+                        <span className="ml-1.5 text-amber-600 font-medium">(최대 4명)</span>
+                      )}
+                    </span>
+                    <div className="flex gap-2 items-center">
+                      <button
+                        type="button"
+                        onClick={handleGenerateAllCharacterImages}
+                        disabled={!nanoBananaKey.trim() || selectedCharacterNames.size === 0}
+                        className="text-xs px-2 py-0.5 rounded bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-40 transition"
+                      >
+                        전체 이미지 생성
+                      </button>
+                      <button
+                        type="button"
+                        onClick={selectAllCharacters}
+                        className="text-xs text-emerald-600 hover:text-emerald-800 underline"
+                      >
+                        전체 선택
+                      </button>
+                      <span className="text-xs text-gray-300">|</span>
+                      <button
+                        type="button"
+                        onClick={deselectAllCharacters}
+                        className="text-xs text-gray-500 hover:text-gray-700 underline"
+                      >
+                        전체 해제
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {extractedCharacters.map((c) => (
+                      <div key={c.name} className="flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedCharacterNames.has(c.name)}
+                          onChange={() => toggleCharacter(c.name)}
+                          className="mt-1 accent-emerald-500 shrink-0"
+                        />
+                        {/* Thumbnail */}
+                        <div className="shrink-0 w-14 h-14 rounded border border-emerald-200 bg-emerald-50 overflow-hidden flex items-center justify-center">
+                          {c.imageStatus === "generating" ? (
+                            <span className="w-5 h-5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                          ) : c.referenceImageUrl ? (
+                            <img
+                              src={c.referenceImageUrl}
+                              alt={c.name}
+                              className="w-full h-full object-cover cursor-zoom-in"
+                              onClick={() => setLightboxUrl(c.referenceImageUrl!)}
+                            />
+                          ) : (
+                            <span className="text-lg text-emerald-300">👤</span>
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-medium text-gray-800">{c.name}</span>
+                            {c.isMandatory && (
+                              <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold leading-none">
+                                ⭐ 필수
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-gray-500 line-clamp-2">{c.description}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleGenerateCharacterImage(c.name)}
+                            disabled={c.imageStatus === "generating" || !nanoBananaKey.trim()}
+                            className="mt-0.5 self-start text-xs px-2 py-0.5 rounded border border-emerald-300 text-emerald-600 hover:bg-emerald-50 disabled:opacity-40 transition"
+                          >
+                            {c.imageStatus === "generating"
+                              ? "생성 중..."
+                              : c.imageStatus === "done"
+                              ? "재생성"
+                              : "이미지 생성"}
+                          </button>
+                          {c.imageStatus === "error" && (
+                            <span className="text-xs text-red-500">생성 실패</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -381,6 +661,7 @@ export default function Home() {
               nanoBananaKey={nanoBananaKey}
               storyContext={learnedStoryContext}
               defaultImagePrompt={defaultImagePrompt}
+              characterImages={characterImages.length > 0 ? characterImages : undefined}
               nanoOptions={{
                 modelPref: nanoModelPref,
                 aspectRatio: nanoAspectRatio,
@@ -426,6 +707,27 @@ export default function Home() {
         onSaveDefaultImagePrompt={handleSaveDefaultImagePrompt}
         learnStatus={learnStatus}
       />
+
+      {/* 캐릭터 이미지 라이트박스 */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <img
+            src={lightboxUrl}
+            alt="캐릭터 레퍼런스"
+            className="max-w-[90vw] max-h-[90vh] rounded-xl shadow-2xl object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            className="absolute top-4 right-4 text-white text-3xl leading-none hover:text-gray-300 transition"
+            onClick={() => setLightboxUrl(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
     </>
   );
 }

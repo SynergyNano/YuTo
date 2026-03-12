@@ -17,6 +17,7 @@ interface ChapterCardProps {
   nanoBananaKey: string;
   storyContext?: string;
   defaultImagePrompt?: string;
+  characterImages?: string[];
   nanoOptions: {
     modelPref: "best" | "fast" | "v2";
     aspectRatio: "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
@@ -38,6 +39,7 @@ export default function ChapterCard({
   onDelete,
   nanoBananaKey,
   defaultImagePrompt = "",
+  characterImages,
   nanoOptions,
 }: ChapterCardProps) {
   const imagesRef = useRef<ChapterImage[]>([]);
@@ -109,6 +111,7 @@ export default function ChapterCard({
             prompt: promptText,
             apiKey: nanoBananaKey,
             options: nanoOptions,
+            ...(characterImages?.length ? { characterImages } : {}),
           }),
         });
 

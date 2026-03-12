@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generatePromptsForChapter } from "@/lib/llmClient";
-import type { ImagePrompt } from "@/types";
+import type { CharacterProfile, ImagePrompt } from "@/types";
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,6 +12,7 @@ export async function POST(request: NextRequest) {
       claudeApiKey,
       customSystemPrompt,
       storyContext,
+      characters,
     } =
       body as {
         chapterNumber: number;
@@ -20,6 +21,7 @@ export async function POST(request: NextRequest) {
         claudeApiKey?: string;
         customSystemPrompt?: string;
         storyContext?: string;
+        characters?: CharacterProfile[];
       };
 
     if (!chapterNumber || !chapterContent || !sceneCount) {
@@ -33,7 +35,7 @@ export async function POST(request: NextRequest) {
       chapterNumber,
       chapterContent,
       sceneCount,
-      { apiKey: claudeApiKey, systemPrompt: customSystemPrompt, storyContext }
+      { apiKey: claudeApiKey, systemPrompt: customSystemPrompt, storyContext, characters }
     );
 
     const prompts: ImagePrompt[] = rawPrompts.map((p, i) => ({

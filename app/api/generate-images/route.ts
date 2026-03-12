@@ -4,7 +4,7 @@ import { generateImage } from "@/lib/nanoBananaClient";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { prompt, apiKey, options } = body as {
+    const { prompt, apiKey, options, characterImages } = body as {
       prompt: string;
       apiKey: string;
       options?: {
@@ -14,6 +14,7 @@ export async function POST(request: NextRequest) {
         height?: number;
         steps?: number;
       };
+      characterImages?: string[];
     };
 
     if (!prompt) {
@@ -88,6 +89,7 @@ export async function POST(request: NextRequest) {
       width,
       height,
       steps,
+      characterImages: Array.isArray(characterImages) ? characterImages.slice(0, 4) : undefined,
     });
 
     if (result.error) {

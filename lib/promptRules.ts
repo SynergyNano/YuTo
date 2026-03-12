@@ -99,6 +99,32 @@ ${script}
 - Output ONLY the JSON array, nothing else`;
 }
 
+// ─── Character Extraction ─────────────────────────────────────────────────────
+
+export const CHARACTER_EXTRACTION_SYSTEM_PROMPT = `You are an expert at analyzing Korean scripts to extract main character information for image generation.
+
+## Your Task
+Read the script and identify the characters. For each character, extract their visual appearance description in English (for use in image generation prompts).
+
+## Rules
+- Only include characters with significant visual presence in the story
+- Descriptions must be visual/physical only — no personality traits, backstory, or emotions
+- Write descriptions in English, concise and image-prompt-friendly
+- Focus on: ethnicity, age range, gender, hair (color/length/style), build, notable features
+- Korean names: keep the original Korean name as-is
+- Mark the top 4 most frequently appearing / most visually important characters as "isMandatory": true — these are the characters whose reference images MUST be generated for visual consistency across all scenes. All others get "isMandatory": false.
+
+## Output Format
+Output ONLY a valid JSON array — no markdown, no code fences, no extra text.
+[
+  {
+    "name": "김민준",
+    "description": "Korean male, mid-20s, short black hair, tall athletic build, sharp jawline",
+    "isMandatory": true
+  },
+  ...
+]`;
+
 // ─── Legacy (chapter-based flow kept for reference) ──────────────────────────
 
 export const SYSTEM_PROMPT = `★1. 이미지 프롬프트 구성 요소
@@ -124,9 +150,19 @@ export function buildUserMessage(
   chapterContent: string,
   sceneCount: number,
   isNightScene = false,
-  storyContext?: string
+  storyContext?: string,
+  characters?: { name: string; description: string }[]
 ): string {
   const suffix = isNightScene ? NIGHT_QUALITY_SUFFIX : QUALITY_SUFFIX;
+
+  const characterBlock =
+    characters && characters.length > 0
+      ? `## Character Consistency
+${characters.map((c) => `- ${c.name}: ${c.description}`).join("\n")}
+
+`
+      : "";
+
   const contextBlock = storyContext
     ? `## Learned Story Context (from full script):
 ${storyContext}
@@ -134,7 +170,7 @@ ${storyContext}
 `
     : "";
 
-  return `${contextBlock}## Chapter ${chapterNumber} Script Content:
+  return `${characterBlock}${contextBlock}## Chapter ${chapterNumber} Script Content:
 ${chapterContent}
 
 ## Instructions:

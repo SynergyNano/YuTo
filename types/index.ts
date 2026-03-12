@@ -38,6 +38,9 @@ export interface SceneSelection {
 export interface CharacterProfile {
   name: string;
   description: string;
+  isMandatory?: boolean; // 반드시 레퍼런스 이미지를 생성해야 하는 핵심 캐릭터 (최대 4명)
+  referenceImageUrl?: string; // base64 data URL or http URL
+  imageStatus?: "idle" | "generating" | "done" | "error";
 }
 
 export interface ChapterPrompt {

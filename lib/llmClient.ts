@@ -4,7 +4,9 @@ import {
   buildUserMessage,
   ANALYSIS_SYSTEM_PROMPT,
   buildAnalysisUserMessage,
+  CHARACTER_EXTRACTION_SYSTEM_PROMPT,
 } from "./promptRules";
+import type { CharacterProfile } from "@/types";
 
 function getClient(apiKey?: string) {
   return new Anthropic({ apiKey: apiKey || process.env.ANTHROPIC_API_KEY });
@@ -20,7 +22,7 @@ export async function generatePromptsForChapter(
   chapterNumber: number,
   chapterContent: string,
   sceneCount: number,
-  options?: { apiKey?: string; systemPrompt?: string; storyContext?: string }
+  options?: { apiKey?: string; systemPrompt?: string; storyContext?: string; characters?: CharacterProfile[] }
 ): Promise<string[]> {
   const client = getClient(options?.apiKey);
   const systemPrompt = options?.systemPrompt?.trim() || SYSTEM_PROMPT;
@@ -29,7 +31,8 @@ export async function generatePromptsForChapter(
     chapterContent,
     sceneCount,
     false,
-    options?.storyContext
+    options?.storyContext,
+    options?.characters
   );
 
   const message = await client.messages.create({
@@ -56,6 +59,38 @@ export async function generatePromptsForChapter(
   }
 
   return prompts.slice(0, sceneCount);
+}
+
+// ─── Character extraction ────────────────────────────────────────────────────
+
+export async function extractCharacters(
+  script: string,
+  options?: { apiKey?: string }
+): Promise<CharacterProfile[]> {
+  const client = getClient(options?.apiKey);
+
+  const message = await client.messages.create({
+    model: getClaudeModel(),
+    max_tokens: 2048,
+    system: CHARACTER_EXTRACTION_SYSTEM_PROMPT,
+    messages: [
+      {
+        role: "user",
+        content: `Extract the main characters from the following script:\n\n${script}`,
+      },
+    ],
+  });
+
+  const text =
+    message.content[0].type === "text" ? message.content[0].text : "";
+
+  const cleaned = text
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
+
+  const parsed: CharacterProfile[] = JSON.parse(cleaned);
+  return parsed;
 }
 
 // ─── Full-script analysis ────────────────────────────────────────────────────
