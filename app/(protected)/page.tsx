@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import type { CharacterProfile, ChapterWorkspace, SceneSelection } from "@/types";
 import { CHAPTER_COLORS, parseChapters } from "@/lib/chapterParser";
@@ -45,8 +46,23 @@ function createWorkspace(index: number): ChapterWorkspace {
 }
 
 export default function Home() {
-  const { data: session } = useSession();
+  const router = useRouter();
+  const { data: session, status } = useSession();
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.replace("/login");
+    }
+  }, [status, router]);
+
+  if (status === "loading") {
+    return (
+      <main className="max-w-5xl mx-auto px-4 py-10 text-center text-sm text-gray-500">
+        로그인 상태를 확인하는 중입니다...
+      </main>
+    );
+  }
 
   // ── Workspaces (챕터 파싱 후 카드 생성 시에만 생성됨) ─────────────────────
   const [workspaces, setWorkspaces] = useState<ChapterWorkspace[]>([]);
