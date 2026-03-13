@@ -6,9 +6,15 @@ interface ImageGeneratorProps {
   chapters: Chapter[];
   images: GeneratedImage[];
   onImageClick?: (url: string) => void;
+  onRegenerateScene?: (image: GeneratedImage) => void;
 }
 
-export default function ImageGenerator({ chapters, images, onImageClick }: ImageGeneratorProps) {
+export default function ImageGenerator({
+  chapters,
+  images,
+  onImageClick,
+  onRegenerateScene,
+}: ImageGeneratorProps) {
   const chapterMap = new Map(chapters.map((c) => [c.number, c]));
 
   const grouped = new Map<number, GeneratedImage[]>();
@@ -63,21 +69,7 @@ export default function ImageGenerator({ chapters, images, onImageClick }: Image
         )}
       </div>
 
-      {/* Overall progress */}
-      <div>
-        <div className="flex justify-between text-xs text-gray-500 mb-1">
-          <span>전체 진행</span>
-          <span>{progress}%</span>
-        </div>
-        <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-          <div
-            className="h-3 bg-blue-500 rounded-full transition-all duration-500"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      </div>
-
-      {/* Per-chapter sections */}
+      {/* Per-chapter sections (각 챕터별 진행 게이지만 표시) */}
       <div className="flex flex-col gap-8">
         {Array.from(grouped.entries()).map(([chapterNumber, chapterImages]) => {
           const chapter = chapterMap.get(chapterNumber);
@@ -145,6 +137,18 @@ export default function ImageGenerator({ chapters, images, onImageClick }: Image
                                 className="text-[11px] px-2 py-1 bg-white text-gray-800 rounded hover:bg-gray-100 transition"
                               >
                                 확대
+                              </button>
+                            )}
+                            {onRegenerateScene && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onRegenerateScene(img);
+                                }}
+                                className="text-[11px] px-2 py-1 bg-white text-gray-800 rounded hover:bg-gray-100 transition"
+                              >
+                                재생성
                               </button>
                             )}
                             <button

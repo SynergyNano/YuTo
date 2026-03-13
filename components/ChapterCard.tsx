@@ -65,6 +65,78 @@ export default function ChapterCard({
     return (workspace.customPrompt || defaultImagePrompt).trim();
   }
 
+  async function handleRegenerateScene(sceneNumber: number) {
+    if (!nanoBananaKey.trim()) {
+      onUpdate((prev) => ({
+        ...prev,
+        imageStatus: "error",
+        imageError: "나노 바나나 API 키를 먼저 입력해주세요. (우측 ⚙ 설정)",
+      }));
+      return;
+    }
+
+    const sceneIndex = sceneNumber - 1;
+    const count = Math.min(10, Math.max(1, workspace.imageCount));
+    if (sceneIndex < 0 || sceneIndex >= count) return;
+
+    const promptText = getPromptForScene(sceneIndex);
+    if (!promptText.trim()) return;
+
+    imagesRef.current = workspace.images.length
+      ? workspace.images.map((img) => ({ ...img }))
+      : Array.from({ length: count }, (_, i) => ({
+          index: i,
+          label: `장면 ${i + 1}`,
+          imageUrl: null,
+          status: "pending" as const,
+        }));
+
+    imagesRef.current = imagesRef.current.map((img) =>
+      img.index === sceneIndex ? { ...img, status: "generating" as const } : img
+    );
+    onUpdate((prev) => ({ ...prev, images: imagesRef.current.slice() }));
+
+    try {
+      const res = await fetch("/api/generate-images", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: promptText,
+          apiKey: nanoBananaKey,
+          options: nanoOptions,
+          ...(characterImages?.length ? { characterImages } : {}),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "이미지 생성 실패");
+
+      if (data.warning && !warningShownRef.current) {
+        warningShownRef.current = true;
+        console.warn("[나노 바나나]", data.warning);
+      }
+
+      const imageUrl =
+        data.imageUrl ??
+        (data.base64 ? `data:image/png;base64,${data.base64}` : null);
+
+      imagesRef.current = imagesRef.current.map((img) =>
+        img.index === sceneIndex
+          ? { ...img, status: "done" as const, imageUrl: imageUrl ?? "" }
+          : img
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      imagesRef.current = imagesRef.current.map((img) =>
+        img.index === sceneIndex
+          ? { ...img, status: "error" as const, error: message }
+          : img
+      );
+    }
+
+    onUpdate((prev) => ({ ...prev, images: imagesRef.current.slice() }));
+  }
+
   async function handleGenerateImages() {
     if (!nanoBananaKey.trim()) {
       onUpdate((prev) => ({
@@ -349,6 +421,11 @@ export default function ChapterCard({
             chapters={[fakeChapter]}
             images={generatedImages}
             onImageClick={onImageLightbox}
+            onRegenerateScene={(img) => {
+              if (img.chapterNumber === workspace.number) {
+                handleRegenerateScene(img.sceneNumber);
+              }
+            }}
           />
         )}
       </div>

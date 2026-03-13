@@ -729,7 +729,7 @@ export default function Home() {
           <img
             src={lightboxUrl}
             alt="캐릭터 레퍼런스"
-            className="max-w-[90vw] max-h-[90vh] rounded-xl shadow-2xl object-contain"
+            className="max-w-[70vw] max-h-[70vh] rounded-xl shadow-2xl object-contain"
             onClick={(e) => e.stopPropagation()}
           />
           <button
