@@ -2,7 +2,6 @@ import Anthropic from "@anthropic-ai/sdk";
 import {
   SYSTEM_PROMPT,
   buildUserMessage,
-  buildSingleSceneUserMessage,
   ANALYSIS_SYSTEM_PROMPT,
   buildAnalysisUserMessage,
   CHARACTER_EXTRACTION_SYSTEM_PROMPT,
@@ -60,40 +59,6 @@ export async function generatePromptsForChapter(
   }
 
   return prompts.slice(0, sceneCount);
-}
-
-/** 단일 장면 프롬프트만 생성 (재생성용). 파싱 단순화로 실패 가능성 감소 */
-export async function generateSingleScenePrompt(
-  chapterNumber: number,
-  chapterContent: string,
-  sceneNumber: number,
-  totalScenes: number,
-  options?: { apiKey?: string; systemPrompt?: string; storyContext?: string; characters?: CharacterProfile[] }
-): Promise<string> {
-  const client = getClient(options?.apiKey);
-  const systemPrompt = options?.systemPrompt?.trim() || SYSTEM_PROMPT;
-  const userMessage = buildSingleSceneUserMessage(
-    chapterNumber,
-    chapterContent,
-    sceneNumber,
-    Math.max(1, totalScenes),
-    false,
-    options?.storyContext,
-    options?.characters
-  );
-
-  const message = await client.messages.create({
-    model: getClaudeModel(),
-    max_tokens: 2048,
-    system: systemPrompt,
-    messages: [{ role: "user", content: userMessage }],
-  });
-
-  const text =
-    message.content[0].type === "text" ? message.content[0].text : "";
-  const trimmed = text.trim();
-  if (!trimmed) throw new Error("빈 프롬프트가 반환되었습니다.");
-  return trimmed;
 }
 
 // ─── Character extraction ────────────────────────────────────────────────────
