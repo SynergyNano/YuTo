@@ -38,6 +38,7 @@ export default function ChapterCard({
   workspace,
   onUpdate,
   onDelete,
+  claudeApiKey,
   nanoBananaKey,
   defaultImagePrompt = "",
   characterImages,
@@ -171,9 +172,9 @@ export default function ChapterCard({
       images: initialImages,
     }));
 
-    for (let i = 0; i < count; i++) {
-      imagesRef.current = imagesRef.current.map((img, idx) =>
-        idx === i ? { ...img, status: "generating" } : img
+    async function generateOne(i: number) {
+      imagesRef.current = imagesRef.current.map((img) =>
+        img.index === i ? { ...img, status: "generating" as const } : img
       );
       onUpdate((prev) => ({ ...prev, images: imagesRef.current.slice() }));
 
@@ -203,17 +204,24 @@ export default function ChapterCard({
           data.imageUrl ??
           (data.base64 ? `data:image/png;base64,${data.base64}` : null);
 
-        imagesRef.current = imagesRef.current.map((img, idx) =>
-          idx === i ? { ...img, status: "done", imageUrl: imageUrl ?? "" } : img
+        imagesRef.current = imagesRef.current.map((img) =>
+          img.index === i ? { ...img, status: "done" as const, imageUrl: imageUrl ?? "" } : img
         );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        imagesRef.current = imagesRef.current.map((img, idx) =>
-          idx === i ? { ...img, status: "error", error: message } : img
+        imagesRef.current = imagesRef.current.map((img) =>
+          img.index === i ? { ...img, status: "error" as const, error: message } : img
         );
       }
 
       onUpdate((prev) => ({ ...prev, images: imagesRef.current.slice() }));
+    }
+
+    const indices = Array.from({ length: count }, (_, i) => i);
+    const concurrency = 3;
+    for (let start = 0; start < indices.length; start += concurrency) {
+      const batch = indices.slice(start, start + concurrency);
+      await Promise.all(batch.map((i) => generateOne(i)));
     }
 
     onUpdate((prev) => ({ ...prev, imageStatus: "done" }));
@@ -351,7 +359,7 @@ export default function ChapterCard({
             </div>
             <div className="flex flex-col gap-2">
               {workspace.scenePrompts!.map((prompt, i) => (
-                <div key={i} className="flex gap-2">
+                <div key={i} className="flex gap-2 items-start">
                   <span
                     className="text-xs font-bold pt-2 w-14 shrink-0 text-right"
                     style={{ color: workspace.color }}

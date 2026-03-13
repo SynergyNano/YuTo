@@ -180,3 +180,41 @@ Each prompt must end with this quality suffix:
 
 Output only the ${sceneCount} prompts, one per line, no numbering.`;
 }
+
+/** 단일 장면 재생성용: N번째 장면(전체 중 하나)에 대한 프롬프트 1개만 요청 */
+export function buildSingleSceneUserMessage(
+  chapterNumber: number,
+  chapterContent: string,
+  sceneIndexOneBased: number,
+  totalScenes: number,
+  isNightScene = false,
+  storyContext?: string,
+  characters?: { name: string; description: string }[]
+): string {
+  const suffix = isNightScene ? NIGHT_QUALITY_SUFFIX : QUALITY_SUFFIX;
+
+  const characterBlock =
+    characters && characters.length > 0
+      ? `## Character Consistency
+${characters.map((c) => `- ${c.name}: ${c.description}`).join("\n")}
+
+`
+      : "";
+
+  const contextBlock = storyContext
+    ? `## Learned Story Context (from full script):
+${storyContext}
+
+`
+      : "";
+
+  return `${characterBlock}${contextBlock}## Chapter ${chapterNumber} Script Content:
+${chapterContent}
+
+## Instructions:
+This chapter has ${totalScenes} key scenes. Generate exactly ONE image prompt for the ${sceneIndexOneBased}th key scene only (scene ${sceneIndexOneBased} of ${totalScenes}).
+The prompt must end with this quality suffix:
+"${suffix}"
+
+Output only the single prompt, no numbering, no list.`;
+}

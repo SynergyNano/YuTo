@@ -85,6 +85,15 @@ export default function Home() {
   const [learnStatus, setLearnStatus] = useState<"idle" | "testing" | "ok" | "error">("idle");
   const [learnMsg, setLearnMsg] = useState("");
   const [showLearnResult, setShowLearnResult] = useState(false);
+  const [learnElapsedSec, setLearnElapsedSec] = useState(0);
+
+  function getLearnButtonLabel() {
+    if (learnStatus !== "testing") return "전체 대본 분석";
+    if (learnElapsedSec < 20) return `줄거리 분석 중... (${learnElapsedSec}초 / 최대 3분)`;
+    if (learnElapsedSec < 40) return `등장인물 분석 중... (${learnElapsedSec}초 / 최대 3분)`;
+    if (learnElapsedSec < 180) return `분석 결과 정리 중... (${learnElapsedSec}초 / 최대 3분)`;
+    return `마무리 중... (${learnElapsedSec}초 / 최대 3분)`;
+  }
 
   // ── 등장인물 추출 ─────────────────────────────────────────────────────────
   const [extractedCharacters, setExtractedCharacters] = useState<CharacterProfile[]>([]);
@@ -181,8 +190,13 @@ export default function Home() {
     const toGenerate = extractedCharacters.filter(
       (c) => selectedCharacterNames.has(c.name) && c.imageStatus !== "generating"
     );
-    for (const char of toGenerate) {
-      await handleGenerateCharacterImage(char.name);
+    if (toGenerate.length === 0) return;
+
+    const names = toGenerate.map((c) => c.name);
+    const concurrency = 3;
+    for (let start = 0; start < names.length; start += concurrency) {
+      const batch = names.slice(start, start + concurrency);
+      await Promise.all(batch.map((name) => handleGenerateCharacterImage(name)));
     }
   }
 
@@ -287,7 +301,8 @@ export default function Home() {
       return;
     }
     setLearnStatus("testing");
-    setLearnMsg("");
+    setLearnElapsedSec(0);
+    setLearnMsg("줄거리·등장인물 분석 중... (최대 3분)");
     setCharacterStatus("extracting");
     setCharacterMsg("");
     setShowLearnResult(false);
@@ -315,8 +330,6 @@ export default function Home() {
       if (!sceneRes.ok) throw new Error(sceneData.error ?? "줄거리 분석 실패");
       const scenes = sceneData.scenes ?? [];
       setLearnedScenes(scenes);
-      setLearnStatus("ok");
-      setLearnMsg(`줄거리 ${scenes.length}개 장면 학습 완료`);
       setShowLearnResult(true);
 
       const charData = await charRes.json();
@@ -326,14 +339,43 @@ export default function Home() {
       setSelectedCharacterNames(new Set());
       setCharacterStatus("done");
       setCharacterMsg(`${chars.length}명 추출 완료`);
+      setLearnMsg(`줄거리 ${scenes.length}개 · 등장인물 ${chars.length}명 분석 완료`);
+      setLearnStatus("ok");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setLearnStatus("error");
-      setLearnMsg(msg);
+      setLearnMsg(`분석 중 오류가 발생했습니다: ${msg}`);
       setCharacterStatus("error");
       setCharacterMsg(msg);
     }
   }
+
+  useEffect(() => {
+    if (learnStatus !== "testing") {
+      setLearnElapsedSec(0);
+      return;
+    }
+    const id = window.setInterval(() => {
+      setLearnElapsedSec((prev) => Math.min(prev + 1, 180));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [learnStatus]);
+
+  useEffect(() => {
+    if (learnStatus !== "testing") return;
+    if (learnElapsedSec < 20) {
+      setLearnMsg("줄거리 구조 분석 중... (초기 장면 후보를 찾는 중)");
+    } else if (learnElapsedSec < 40) {
+      setLearnMsg("등장인물 목록 정리 중... (이름·역할·외형 파악)");
+    } else if (learnElapsedSec < 180) {
+      setLearnMsg("장면·등장인물 정보를 정리하는 중... (곧 결과가 표시됩니다)");
+    } else {
+      setLearnMsg(
+        "예상보다 오래 걸리고 있습니다. 분석을 마무리 중이거나 서버 응답을 기다리는 중입니다.\n" +
+          "3분 이상 이 상태가 계속되면 네트워크 상태를 확인하거나 다시 시도해 주세요."
+      );
+    }
+  }, [learnStatus, learnElapsedSec]);
 
   // ── API 설정 (source of truth) ────────────────────────────────────────────
   const [claudeApiKey, setClaudeApiKey] = useState("");
@@ -368,7 +410,7 @@ export default function Home() {
       else localStorage.removeItem("yuto_claude_api_key");
     } catch { /* ignore */ }
   }
-  
+
 
   function handleNanoBananaKeyChange(value: string) {
     setNanoBananaKey(value);
@@ -502,7 +544,7 @@ export default function Home() {
                   {learnStatus === "testing" ? (
                     <>
                       <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      분석 중...
+                      {getLearnButtonLabel()}
                     </>
                   ) : (
                     "전체 대본 분석"
