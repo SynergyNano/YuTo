@@ -83,20 +83,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "steps는 1~80 범위여야 합니다." }, { status: 400 });
     }
 
+    const hasCharacterRefs =
+      Array.isArray(characterImages) && characterImages.length > 0;
     const result = await generateImage(prompt, resolvedKey, resolvedUrl, {
       modelPref: options?.modelPref,
       aspectRatio: options?.aspectRatio,
       width,
       height,
       steps,
-      characterImages: Array.isArray(characterImages) ? characterImages.slice(0, 4) : undefined,
+      characterImages: hasCharacterRefs ? characterImages!.slice(0, 4) : undefined,
     });
 
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: 500 });
     }
 
-    return NextResponse.json(result);
+    return NextResponse.json({
+      ...result,
+      ...(isGoogle && hasCharacterRefs
+        ? {
+            warning:
+              "캐릭터 레퍼런스는 Google API에서는 적용되지 않습니다. 캐릭터 일관성을 위해 설정에서 커스텀 나노 바나나 URL을 사용해 주세요.",
+          }
+        : {}),
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: message }, { status: 500 });

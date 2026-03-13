@@ -48,10 +48,8 @@ export default function Home() {
   const { data: session } = useSession();
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
-  // ── Workspaces ───────────────────────────────────────────────────────────
-  const [workspaces, setWorkspaces] = useState<ChapterWorkspace[]>([
-    createWorkspace(0),
-  ]);
+  // ── Workspaces (챕터 파싱 후 카드 생성 시에만 생성됨) ─────────────────────
+  const [workspaces, setWorkspaces] = useState<ChapterWorkspace[]>([]);
 
   function addWorkspace() {
     setWorkspaces((prev) => [...prev, createWorkspace(prev.length)]);
@@ -79,7 +77,7 @@ export default function Home() {
 
   // ── 전체 대본 가져오기 ───────────────────────────────────────────────────
   const [fullScript, setFullScript] = useState("");
-  const [showImport, setShowImport] = useState(true);
+  const [showImport, setShowImport] = useState(true); // 처음엔 전체 대본만 보이도록 펼침 유지
   const [importError, setImportError] = useState("");
   const DEFAULT_FULL_SCRIPT_PROMPT = "전체 대본을 읽고, 어떤 내용인지 상세하게 학습해줘";
   const [fullScriptPrompt, setFullScriptPrompt] = useState(DEFAULT_FULL_SCRIPT_PROMPT);
@@ -370,6 +368,7 @@ export default function Home() {
       else localStorage.removeItem("yuto_claude_api_key");
     } catch { /* ignore */ }
   }
+  
 
   function handleNanoBananaKeyChange(value: string) {
     setNanoBananaKey(value);
@@ -649,36 +648,49 @@ export default function Home() {
           )}
         </div>
 
-        {/* ── 챕터 카드 목록 ──────────────────────────────────────────────── */}
+        {/* ── 챕터 카드 목록 (챕터 파싱 후 카드 생성 시에만 표시) ───────────── */}
         <div className="flex flex-col gap-4">
-          {workspaces.map((ws) => (
-            <ChapterCard
-              key={ws.id}
-              workspace={ws}
-              onUpdate={(updater) => updateWorkspace(ws.id, updater)}
-              onDelete={() => deleteWorkspace(ws.id)}
-              claudeApiKey={claudeApiKey}
-              nanoBananaKey={nanoBananaKey}
-              storyContext={learnedStoryContext}
-              defaultImagePrompt={defaultImagePrompt}
-              characterImages={characterImages.length > 0 ? characterImages : undefined}
-              nanoOptions={{
-                modelPref: nanoModelPref,
-                aspectRatio: nanoAspectRatio,
-                width: nanoWidth,
-                height: nanoHeight,
-              }}
-            />
-          ))}
+          {workspaces.length === 0 ? (
+            <div className="rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 px-6 py-10 text-center">
+              <p className="text-sm text-gray-500">
+                전체 대본을 입력한 뒤 <strong className="text-gray-700">챕터 파싱 후 카드 생성</strong> 버튼을 누르면
+                <br />
+                챕터별 카드가 여기에 생성됩니다.
+              </p>
+            </div>
+          ) : (
+            <>
+              {workspaces.map((ws) => (
+                <ChapterCard
+                  key={ws.id}
+                  workspace={ws}
+                  onUpdate={(updater) => updateWorkspace(ws.id, updater)}
+                  onDelete={() => deleteWorkspace(ws.id)}
+                  claudeApiKey={claudeApiKey}
+                  nanoBananaKey={nanoBananaKey}
+                  storyContext={learnedStoryContext}
+                  defaultImagePrompt={defaultImagePrompt}
+                  characterImages={characterImages.length > 0 ? characterImages : undefined}
+                  onImageLightbox={setLightboxUrl}
+                  nanoOptions={{
+                    modelPref: nanoModelPref,
+                    aspectRatio: nanoAspectRatio,
+                    width: nanoWidth,
+                    height: nanoHeight,
+                  }}
+                />
+              ))}
 
-          <button
-            type="button"
-            onClick={addWorkspace}
-            className="flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-gray-300 text-gray-400 text-sm font-medium hover:border-blue-400 hover:text-blue-500 transition"
-          >
-            <span className="text-lg leading-none">+</span>
-            챕터 추가
-          </button>
+              <button
+                type="button"
+                onClick={addWorkspace}
+                className="flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-gray-300 text-gray-400 text-sm font-medium hover:border-blue-400 hover:text-blue-500 transition"
+              >
+                <span className="text-lg leading-none">+</span>
+                챕터 추가
+              </button>
+            </>
+          )}
         </div>
       </main>
 

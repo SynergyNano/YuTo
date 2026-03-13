@@ -302,7 +302,7 @@ export default function SettingsPanel({
               )}
               {nanoTestStatus === "error" && (
                 <span
-                  className="text-xs text-red-500 font-medium truncate max-w-[160px]"
+                  className="text-xs text-red-500 font-medium block max-w-[320px] break-words whitespace-pre-wrap"
                   title={nanoTestMsg}
                 >
                   ✕ {nanoTestMsg}

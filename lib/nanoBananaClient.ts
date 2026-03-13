@@ -20,6 +20,31 @@ function isGoogleGenerativeLanguageUrl(url: URL) {
   return url.hostname === "generativelanguage.googleapis.com";
 }
 
+function isNanobnanaComUrl(url: URL) {
+  return url.hostname === "nanobnana.com";
+}
+
+/** data URL이면 순수 base64만 추출, URL이면 그대로. 백엔드 호환용. */
+function normalizeReferenceImage(img: string): string {
+  const s = typeof img === "string" ? img.trim() : "";
+  if (!s) return s;
+  const dataUrlMatch = s.match(/^data:image\/[^;]+;base64,(.+)$/i);
+  if (dataUrlMatch) return dataUrlMatch[1];
+  return s;
+}
+
+/** data URL → { mimeType, base64 }, http URL이면 null (Gemini는 inlineData만 지원) */
+function refToInlinePart(img: string): { mimeType: string; data: string } | null {
+  const s = typeof img === "string" ? img.trim() : "";
+  if (!s) return null;
+  const dataUrlMatch = s.match(/^data:(image\/[^;]+);base64,(.+)$/i);
+  if (dataUrlMatch) {
+    const mime = dataUrlMatch[1].toLowerCase();
+    return { mimeType: mime === "image/jpg" ? "image/jpeg" : mime, data: dataUrlMatch[2] };
+  }
+  return null;
+}
+
 type GoogleModel = {
   name?: string; // e.g. "models/imagen-3.0-generate-002"
   supportedGenerationMethods?: string[]; // e.g. ["generateImages"]
@@ -115,6 +140,14 @@ async function callGoogleGenerateImages(
 
   if (!res.ok) {
     const snippet = await fetchTextOrJsonSnippet(res);
+    // Free tier keys often get blocked for Imagen image generation.
+    if (/only available on paid plans/i.test(snippet) || /upgrade your account/i.test(snippet)) {
+      throw new Error(
+        `${method} ${res.status} (${modelName}): Google Imagen은 유료 플랜/결제 연결이 필요합니다. ` +
+          `Google AI Studio에서 프로젝트 결제(Plan/Billing)를 활성화한 뒤 다시 시도해주세요. ` +
+          `원문: ${snippet}`
+      );
+    }
     throw new Error(`${method} ${res.status} (${modelName}): ${snippet}`);
   }
 
@@ -275,6 +308,167 @@ async function generateImageViaGoogleImagen(prompt: string, apiKey: string, base
   );
 }
 
+/** nanobnana.com: POST /api/v2/generate → task_id → poll /api/v2/status */
+async function generateImageViaNanobnanaCom(
+  prompt: string,
+  apiKey: string,
+  _url: URL,
+  options?: NanoBananaGenerateOptions
+): Promise<NanoBananaResponse> {
+  const base = "https://nanobnana.com";
+  const genUrl = `${base}/api/v2/generate`;
+
+  const refImages = (options?.characterImages ?? []).slice(0, 4).filter((s) => typeof s === "string" && s.trim());
+  const maxSide = Math.max(options?.width ?? 1024, options?.height ?? 1024);
+  const size = maxSide >= 2048 ? "4K" : maxSide >= 1024 ? "2K" : "1K";
+
+  const body: Record<string, unknown> = {
+    prompt,
+    aspect_ratio: options?.aspectRatio ?? "1:1",
+    size,
+    format: "png",
+  };
+  if (refImages.length > 0) {
+    body.images = refImages;
+  }
+
+  const res = await fetch(genUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const text = await res.text();
+  let data: { code?: number; message?: string; data?: { task_id?: string } };
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`Nano Banana(nanobnana.com) 응답 파싱 실패: ${text.slice(0, 300)}`);
+  }
+
+  if (!res.ok) {
+    const msg = data?.message || text.slice(0, 300);
+    throw new Error(`Nano Banana(nanobnana.com) ${res.status}: ${msg}`);
+  }
+
+  const taskId = data?.data?.task_id;
+  if (!taskId) {
+    return { error: "nanobnana.com: task_id를 받지 못했습니다." };
+  }
+
+  const statusUrl = `${base}/api/v2/status?task_id=${encodeURIComponent(taskId)}`;
+  const maxAttempts = 60;
+  const intervalMs = 2000;
+
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise((r) => setTimeout(r, i === 0 ? 3000 : intervalMs));
+
+    const statusRes = await fetch(statusUrl, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+    });
+    const statusText = await statusRes.text();
+    let statusData: {
+      code?: number;
+      data?: { status?: number; response?: string | null; error_message?: string | null };
+    };
+    try {
+      statusData = JSON.parse(statusText);
+    } catch {
+      continue;
+    }
+
+    const d = statusData?.data;
+    if (!d) continue;
+
+    if (d.status === -1) {
+      return { error: d.error_message || "nanobnana.com 생성 실패" };
+    }
+    if (d.status === 1 && d.response) {
+      try {
+        const urls = JSON.parse(d.response) as string[];
+        const imageUrl = Array.isArray(urls) && urls[0] ? urls[0] : null;
+        if (imageUrl) return { imageUrl };
+      } catch {
+        return { error: "nanobnana.com: 이미지 URL 파싱 실패" };
+      }
+    }
+  }
+
+  return { error: "nanobnana.com: 제한 시간 내에 완료되지 않았습니다." };
+}
+
+/** Google Gemini generateContent: 레퍼런스 이미지(최대 4장) 포함 → 캐릭터 일관성 지원 */
+async function callGoogleGeminiGenerateContentWithRefs(
+  prompt: string,
+  apiKey: string,
+  baseUrl: URL,
+  options?: NanoBananaGenerateOptions
+): Promise<NanoBananaResponse> {
+  const refParts: { inlineData: { mimeType: string; data: string } }[] = [];
+  for (const img of (options?.characterImages ?? []).slice(0, 4)) {
+    const part = refToInlinePart(img);
+    if (part) refParts.push({ inlineData: part });
+  }
+  if (refParts.length === 0) return { error: "Google 레퍼런스: data URL 형식 이미지가 필요합니다." };
+
+  const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [
+    { text: prompt },
+    ...refParts,
+  ];
+
+  const aspectRatio = options?.aspectRatio ?? "1:1";
+  const body: Record<string, unknown> = {
+    contents: [{ role: "user", parts }],
+    generationConfig: {
+      responseModalities: ["IMAGE"],
+      imageConfig: {
+        aspectRatio,
+        imageSize: "2K",
+      },
+    },
+  };
+
+  const path = "/v1beta/models/gemini-3.1-flash-image-preview:generateContent";
+  const url = new URL(path, baseUrl.origin);
+  url.searchParams.set("key", apiKey);
+
+  const res = await fetch(url.toString(), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  const text = await res.text();
+  if (!res.ok) {
+    const snippet = text.trim().slice(0, 600);
+    if (/only available on paid plans/i.test(snippet) || /upgrade your account/i.test(snippet)) {
+      throw new Error(
+        `Google Gemini 이미지 생성은 유료 플랜/결제 연결이 필요합니다. ` +
+          `프로젝트 결제를 활성화한 뒤 다시 시도해주세요. 원문: ${snippet}`
+      );
+    }
+    throw new Error(`Google Gemini generateContent ${res.status}: ${snippet}`);
+  }
+
+  let data: { candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data?: string }; text?: string }> } }> };
+  try {
+    data = JSON.parse(text);
+  } catch {
+    return { error: "Google Gemini 응답 파싱 실패" };
+  }
+
+  const candidate = data?.candidates?.[0];
+  const partsOut = candidate?.content?.parts ?? [];
+  for (const part of partsOut) {
+    if (part?.inlineData?.data) return { base64: part.inlineData.data };
+  }
+  return { error: "Google Gemini: 생성된 이미지를 찾을 수 없습니다." };
+}
+
 export async function generateImage(
   prompt: string,
   apiKey: string,
@@ -288,11 +482,20 @@ export async function generateImage(
     throw new Error(`Nano Banana API URL이 올바르지 않습니다: ${apiUrl}`);
   }
 
+  if (isNanobnanaComUrl(url)) {
+    return await generateImageViaNanobnanaCom(prompt, apiKey, url, options);
+  }
+
   if (isGoogleGenerativeLanguageUrl(url)) {
     try {
-      // Use options to influence model selection and aspect ratio when possible.
-      // For Google generateImages, we apply aspectRatio. "resolution" support varies by API.
-      // characterImages(레퍼런스 이미지)는 Google API 요청에 포함되지 않음 → 캐릭터 일관성 미지원.
+      const hasRefs = (options?.characterImages?.length ?? 0) > 0;
+      const refsAreDataUrls = (options?.characterImages ?? []).slice(0, 4).some((s) =>
+        /^data:image\/[^;]+;base64,/i.test(String(s).trim())
+      );
+      if (hasRefs && refsAreDataUrls) {
+        return await callGoogleGeminiGenerateContentWithRefs(prompt, apiKey, url, options);
+      }
+      // 레퍼런스 없을 때만 Imagen 경로 사용
       const models = await listGoogleModels(apiKey, url);
       const imagenCandidates = models
         .filter((m) => typeof m.name === "string" && m.name.includes("imagen"))
@@ -343,22 +546,30 @@ export async function generateImage(
     }
   }
 
+  const refImages = (options?.characterImages ?? [])
+    .slice(0, 4)
+    .map(normalizeReferenceImage)
+    .filter((s) => s.length > 0);
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${apiKey}`,
+  };
+  if (apiKey.trim()) {
+    headers["X-API-Key"] = apiKey.trim();
+  }
+
   let response: Response;
   try {
     response = await fetch(url.toString(), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers,
       body: JSON.stringify({
         prompt,
         width: options?.width ?? 1024,
         height: options?.height ?? 1024,
         num_inference_steps: options?.steps ?? 30,
-        ...(options?.characterImages?.length
-          ? { character_images: options.characterImages.slice(0, 4) }
-          : {}),
+        ...(refImages.length > 0 ? { character_images: refImages } : {}),
       }),
     });
   } catch (err) {

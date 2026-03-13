@@ -5,9 +5,10 @@ import type { Chapter, GeneratedImage } from "@/types";
 interface ImageGeneratorProps {
   chapters: Chapter[];
   images: GeneratedImage[];
+  onImageClick?: (url: string) => void;
 }
 
-export default function ImageGenerator({ chapters, images }: ImageGeneratorProps) {
+export default function ImageGenerator({ chapters, images, onImageClick }: ImageGeneratorProps) {
   const chapterMap = new Map(chapters.map((c) => [c.number, c]));
 
   const grouped = new Map<number, GeneratedImage[]>();
@@ -126,24 +127,40 @@ export default function ImageGenerator({ chapters, images }: ImageGeneratorProps
                         <img
                           src={img.imageUrl}
                           alt={img.label}
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-cover cursor-pointer"
+                          onClick={() => onImageClick?.(img.imageUrl!)}
                         />
                         <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center gap-2 p-2">
                           <p className="text-white text-[10px] font-bold text-center">
                             {img.label}
                           </p>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              downloadImage(
-                                img.imageUrl!,
-                                `chapter${img.chapterNumber}_scene${img.sceneNumber}.png`
-                              )
-                            }
-                            className="text-[11px] px-2 py-1 bg-white text-gray-800 rounded hover:bg-gray-100 transition"
-                          >
-                            다운로드
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            {onImageClick && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onImageClick(img.imageUrl!);
+                                }}
+                                className="text-[11px] px-2 py-1 bg-white text-gray-800 rounded hover:bg-gray-100 transition"
+                              >
+                                확대
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                downloadImage(
+                                  img.imageUrl!,
+                                  `chapter${img.chapterNumber}_scene${img.sceneNumber}.png`
+                                );
+                              }}
+                              className="text-[11px] px-2 py-1 bg-white text-gray-800 rounded hover:bg-gray-100 transition"
+                            >
+                              다운로드
+                            </button>
+                          </div>
                         </div>
                       </>
                     ) : img.status === "generating" ? (

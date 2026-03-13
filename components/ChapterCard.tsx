@@ -18,6 +18,7 @@ interface ChapterCardProps {
   storyContext?: string;
   defaultImagePrompt?: string;
   characterImages?: string[];
+  onImageLightbox?: (url: string) => void;
   nanoOptions: {
     modelPref: "best" | "fast" | "v2";
     aspectRatio: "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
@@ -40,9 +41,11 @@ export default function ChapterCard({
   nanoBananaKey,
   defaultImagePrompt = "",
   characterImages,
+  onImageLightbox,
   nanoOptions,
 }: ChapterCardProps) {
   const imagesRef = useRef<ChapterImage[]>([]);
+  const warningShownRef = useRef(false);
 
   const overallStatus =
     workspace.imageStatus === "done" || workspace.imageStatus === "generating"
@@ -88,6 +91,7 @@ export default function ChapterCard({
     }));
 
     imagesRef.current = initialImages;
+    warningShownRef.current = false;
     onUpdate((prev) => ({
       ...prev,
       imageStatus: "generating",
@@ -117,6 +121,11 @@ export default function ChapterCard({
 
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "이미지 생성 실패");
+
+        if (data.warning && !warningShownRef.current) {
+          warningShownRef.current = true;
+          console.warn("[나노 바나나]", data.warning);
+        }
 
         const imageUrl =
           data.imageUrl ??
@@ -336,7 +345,11 @@ export default function ChapterCard({
 
         {/* Image grid */}
         {workspace.images.length > 0 && (
-          <ImageGenerator chapters={[fakeChapter]} images={generatedImages} />
+          <ImageGenerator
+            chapters={[fakeChapter]}
+            images={generatedImages}
+            onImageClick={onImageLightbox}
+          />
         )}
       </div>
     </div>
