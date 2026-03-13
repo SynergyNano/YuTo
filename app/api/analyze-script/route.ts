@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { analyzeScript } from "@/lib/llmClient";
 import { CHAPTER_COLORS } from "@/lib/chapterParser";
 import type { SceneSelection } from "@/types";
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await auth();
+    if (!session) {
+      return NextResponse.json({ error: "인증되지 않은 요청입니다." }, { status: 401 });
+    }
+
     const body = await request.json();
     const { script, sceneCount, claudeApiKey, customSystemPrompt } = body as {
       script: string;

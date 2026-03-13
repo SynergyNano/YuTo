@@ -2,11 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
-const INVITE_CODE = process.env.INVITE_CODE ?? "yuto2026";
+const INVITE_CODE = process.env.INVITE_CODE;
 
 export async function POST(req: NextRequest) {
   try {
     const { email, password, name, inviteCode } = await req.json();
+
+    if (!INVITE_CODE) {
+      return NextResponse.json(
+        { error: "서버에 초대코드가 설정되지 않았습니다. 관리자에게 문의해주세요." },
+        { status: 500 }
+      );
+    }
 
     // 초대코드 검증
     if (!inviteCode || inviteCode.trim() !== INVITE_CODE) {
